@@ -126,10 +126,15 @@ app.UseCors("Frontend");
 var wwwrootPath = app.Environment.WebRootPath
     ?? Path.Combine(AppContext.BaseDirectory, "wwwroot");
 
+var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+provider.Mappings[".glb"] = "model/gltf-binary";
+provider.Mappings[".gltf"] = "model/gltf+json";
+
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(wwwrootPath),
-    RequestPath = ""
+    RequestPath = "",
+    ContentTypeProvider = provider
 });
 
 app.UseAuthentication();
