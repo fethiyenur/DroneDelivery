@@ -10,12 +10,24 @@ using DroneKurye.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+//
+// ── 🔥 RENDER PORT FIX (çok kritik)
+//
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
 
-// ── Veritabanı ─────────────────────────────────────────────────────────────
+//
+// ── Veritabanı
+//
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite(builder.Configuration.GetConnectionString("Default")));
 
-// ── JWT Auth ───────────────────────────────────────────────────────────────
+//
+// ── JWT AUTH
+//
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? throw new InvalidOperationException("Jwt:Secret yapılandırılmamış!");
 
@@ -34,55 +46,74 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.Zero
         };
 
-        // SignalR için token query string desteği
         opt.Events = new JwtBearerEvents
         {
             OnMessageReceived = ctx =>
             {
                 var token = ctx.Request.Query["access_token"];
                 var path = ctx.HttpContext.Request.Path;
+
                 if (!string.IsNullOrEmpty(token) && path.StartsWithSegments("/hubs"))
+                {
                     ctx.Token = token;
+                }
+
                 return Task.CompletedTask;
             }
         };
     });
 
-// ── Yetki Politikaları ─────────────────────────────────────────────────────
+//
+// ── Authorization
+//
 builder.Services.AddAuthorization(Policies.Register);
 
-// ── Servisler ──────────────────────────────────────────────────────────────
+//
+// ── Services
+//
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddHttpClient();
-builder.Services.AddSingleton<DroneSimulationService>();
-builder.Services.AddSingleton<IDroneSimulationService>(sp => sp.GetRequiredService<DroneSimulationService>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<DroneSimulationService>());
 
-// ── CORS ───────────────────────────────────────────────────────────────────
+builder.Services.AddHttpClient();
+
+builder.Services.AddSingleton<DroneSimulationService>();
+builder.Services.AddSingleton<IDroneSimulationService>(sp =>
+    sp.GetRequiredService<DroneSimulationService>());
+
+builder.Services.AddHostedService(sp =>
+    sp.GetRequiredService<DroneSimulationService>());
+
+//
+// ── CORS
+//
 builder.Services.AddCors(opt =>
+{
     opt.AddPolicy("Frontend", policy =>
         policy
-            .WithOrigins(
-                builder.Configuration["AllowedOrigins"]?.Split(",")
-                ?? ["http://localhost:3000", "http://localhost:5173"])
+            .AllowAnyOrigin()
             .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials()));
+            .AllowAnyMethod());
+});
 
-// ── SignalR ────────────────────────────────────────────────────────────────
+//
+// ── SignalR
+//
 builder.Services.AddSignalR();
 
-// ── Static files (wwwroot) ─────────────────────────────────────────────────
+//
+// ── Controllers + Swagger
+//
 builder.Services.AddControllers();
+
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "Drone Kurye API",
         Version = "v1",
-        Description = "Hibrit Drone Kurye Sistemi — ASP.NET Core Web API"
+        Description = "Hibrit Drone Kurye Sistemi"
     });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -94,13 +125,17 @@ builder.Services.AddSwaggerGen(c =>
         In = ParameterLocation.Header,
         Description = "Bearer {token}"
     });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
                 Reference = new OpenApiReference
-                { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
             },
             Array.Empty<string>()
         }
@@ -108,14 +143,10 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
-var port = Environment.GetEnvironmentVariable("PORT");
 
-if (!string.IsNullOrEmpty(port))
-{
-    app.Urls.Add($"http://0.0.0.0:{port}");
-}
-
-// ── Middleware Pipeline ────────────────────────────────────────────────────
+//
+// ── Pipeline
+//
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -126,12 +157,20 @@ if (app.Environment.IsDevelopment())
     await db.Database.MigrateAsync();
 }
 
+//
+// ⚠️ Render için HTTPS redirect bazen sorun çıkarabilir
+//
 app.UseHttpsRedirection();
+
 app.UseStaticFiles();
+
 app.UseCors("Frontend");
+
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
+
 app.MapHub<DroneHub>("/hubs/drone");
 
 app.MapGet("/", () => "Drone API is running");
