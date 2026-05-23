@@ -1,0 +1,62 @@
+## =========================
+## Visual Studio / .NET
+## =========================
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## =========================
+## Build output
+## =========================
+publish/
+wwwroot/lib/
+
+## =========================
+## Secrets / Config
+## =========================
+appsettings.Development.json
+secrets.json
+
+## API keys / local configs (opsiyonel)
+*.key
+
+## =========================
+## Databases
+## =========================
+*.db
+*.sqlite
+*.sqlite3
+
+## =========================
+## Logs
+## =========================
+*.log
+Logs/
+
+## =========================
+## Node / frontend (varsa)
+## =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+## =========================
+## OS files
+## =========================
+.DS_Store
+Thumbs.db
+
+## =========================
+## Rider / JetBrains (varsa)
+## =========================
+.idea/
+
+## =========================
+## Docker (kullanıyorsan cache)
+## =========================
+.docker/

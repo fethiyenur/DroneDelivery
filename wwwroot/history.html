@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drone Kurye — Gecmis Veriler</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/auth.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; }
+  .page { padding: 24px 20px; }
+  .section-title { font-size: 13px; font-weight: 600; color: #8b949e; margin: 24px 0 12px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #21262d; padding-bottom: 6px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; }
+  .stat-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+  .stat-value { font-size: 24px; font-weight: 700; }
+  .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  @media (max-width: 500px) { .chart-grid { grid-template-columns: 1fr; } }
+  .chart-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; }
+  .chart-title { font-size: 12px; color: #8b949e; margin-bottom: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  .controls { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .controls label { font-size: 13px; color: #8b949e; }
+  select { background: #161b22; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  .btn-load { background: #238636; border: none; border-radius: 8px; color: #fff; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-load:hover { background: #2ea043; }
+  .loading { color: #8b949e; font-size: 13px; display: none; }
+  .guest-notice { background: #1c2128; border: 1px solid #d29922; border-radius: 8px; padding: 10px 16px; margin-bottom: 16px; font-size: 13px; color: #d29922; }
+  .table-wrap { overflow-x: auto; border-radius: 10px; max-height: 400px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; font-size: 12px; min-width: 900px; }
+  th { padding: 8px 12px; text-align: left; color: #8b949e; background: #1c2128; border-bottom: 1px solid #30363d; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  td { padding: 8px 12px; border-bottom: 1px solid #21262d; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1c2128; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 11px; }
+  .badge-green { background: #1a3a2a; color: #3fb950; }
+  .badge-yellow { background: #2d2a1a; color: #d29922; }
+  .badge-red { background: #3a1a1a; color: #f85149; }
+  .opt-disabled { color: #8b949e; }
+</style>
+</head>
+<body>
+<div id="navbar-container"></div>
+<div class="page">
+
+  <div id="guest-notice" class="guest-notice" style="display:none">
+    Ucretsiz planda yalnizca son 20 kayit goruntulenir. Premium'a gecerek 200 kayda erisin.
+  </div>
+
+  <div class="controls">
+    <label>Kayit Sayisi:</label>
+    <select id="count-select">
+      <option value="20">Son 20</option>
+      <option value="50" selected>Son 50</option>
+      <option value="100">Son 100</option>
+      <option value="200">Son 200</option>
+    </select>
+    <button class="btn-load" onclick="loadData()">Yukle</button>
+    <span id="loading-text" class="loading">Yukleniyor...</span>
+  </div>
+
+  <div class="section-title">Ozet Istatistikler</div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Toplam Kayit</div><div class="stat-value" id="st-total" style="color:#58a6ff">-</div></div>
+    <div class="stat-card"><div class="stat-label">Ort. Batarya</div><div class="stat-value" id="st-bat" style="color:#3fb950">-</div></div>
+    <div class="stat-card"><div class="stat-label">Ort. Hiz</div><div class="stat-value" id="st-speed" style="color:#d29922">-</div></div>
+    <div class="stat-card"><div class="stat-label">Ort. Yukseklik</div><div class="stat-value" id="st-alt" style="color:#a371f7">-</div></div>
+    <div class="stat-card"><div class="stat-label">Maks. Hiz</div><div class="stat-value" id="st-maxspeed" style="color:#d29922">-</div></div>
+    <div class="stat-card"><div class="stat-label">Maks. Yukseklik</div><div class="stat-value" id="st-maxalt" style="color:#a371f7">-</div></div>
+    <div class="stat-card"><div class="stat-label">Min. Batarya</div><div class="stat-value" id="st-minbat" style="color:#f85149">-</div></div>
+    <div class="stat-card"><div class="stat-label">Engel Algilama</div><div class="stat-value" id="st-obstacle" style="color:#f85149">-</div></div>
+  </div>
+
+  <div class="section-title">Gecmis Grafikleri</div>
+  <div class="chart-grid">
+    <div class="chart-card"><div class="chart-title">Batarya (%) - Zaman</div><canvas id="chart-battery" height="120"></canvas></div>
+    <div class="chart-card"><div class="chart-title">Yukseklik (m) - Zaman</div><canvas id="chart-altitude" height="120"></canvas></div>
+    <div class="chart-card"><div class="chart-title">Hiz (m/s) - Zaman</div><canvas id="chart-speed" height="120"></canvas></div>
+    <div class="chart-card"><div class="chart-title">Sinyal Gucu (%) - Zaman</div><canvas id="chart-signal" height="120"></canvas></div>
+    <div class="chart-card"><div class="chart-title">Roll / Pitch Acilari - Zaman</div><canvas id="chart-orientation" height="120"></canvas></div>
+    <div class="chart-card"><div class="chart-title">Yaw Acisi - Zaman</div><canvas id="chart-yaw" height="120"></canvas></div>
+  </div>
+
+  <div class="section-title">Detayli Kayitlar</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Zaman</th><th>Enlem</th><th>Boylam</th><th>Yukseklik</th>
+        <th>Hiz</th><th>Batarya</th><th>Sinyal</th>
+        <th>Roll</th><th>Pitch</th><th>Yaw</th>
+        <th>Ucus Modu</th><th>RTK</th><th>Engel</th>
+      </tr></thead>
+      <tbody id="history-tbody">
+        <tr><td colspan="13" style="text-align:center;color:#8b949e;padding:30px">Veri yuklemek icin Yukle butonuna basin.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+if (!requireAuth()) throw new Error("auth");
+renderNavbar("history");
+
+var user = getUser();
+var isGuest = user.role === "Guest";
+
+if (isGuest) {
+  document.getElementById("guest-notice").style.display = "block";
+
+  // Guest: sadece 20 seçeneği — diğerlerini kaldır, yerine disabled metin koy
+  var sel = document.getElementById("count-select");
+  // Mevcut seçenekleri temizle
+  sel.innerHTML = '';
+  // Sadece 20 ekle
+  var opt20 = document.createElement("option");
+  opt20.value = "20"; opt20.text = "Son 20"; sel.appendChild(opt20);
+  // Diğerlerini disabled olarak ekle
+  [["50","Son 50"],["100","Son 100"],["200","Son 200"]].forEach(function(item) {
+    var opt = document.createElement("option");
+    opt.value = item[0]; opt.text = item[1] + " — Premium"; opt.disabled = true;
+    sel.appendChild(opt);
+  });
+
+  // Değer değişmeye çalışılırsa zorla 20'ye döndür
+  sel.addEventListener("change", function() {
+    this.value = "20";
+  });
+}
+
+function makeChart(id, datasets) {
+  var chartDefaults = { tension: 0.3, fill: true, pointRadius: 0, borderWidth: 2 };
+  return new Chart(document.getElementById(id).getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets: datasets.map(function(d){ return Object.assign({}, chartDefaults, d); }) },
+    options: {
+      animation: false,
+      plugins: { legend: { display: datasets.length > 1, labels: { color: '#8b949e', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#8b949e', font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } }
+      }
+    }
+  });
+}
+
+var charts = {
+  battery:     makeChart('chart-battery',     [{ label: 'Batarya %',   borderColor: '#3fb950', backgroundColor: '#3fb95022' }]),
+  altitude:    makeChart('chart-altitude',    [{ label: 'Yukseklik m', borderColor: '#58a6ff', backgroundColor: '#58a6ff22' }]),
+  speed:       makeChart('chart-speed',       [{ label: 'Hiz m/s',     borderColor: '#d29922', backgroundColor: '#d2992222' }]),
+  signal:      makeChart('chart-signal',      [{ label: 'Sinyal %',    borderColor: '#a371f7', backgroundColor: '#a371f722' }]),
+  orientation: makeChart('chart-orientation', [
+    { label: 'Roll°',  borderColor: '#58a6ff', backgroundColor: 'transparent', fill: false },
+    { label: 'Pitch°', borderColor: '#3fb950', backgroundColor: 'transparent', fill: false }
+  ]),
+  yaw: makeChart('chart-yaw', [{ label: 'Yaw°', borderColor: '#d29922', backgroundColor: '#d2992222' }])
+};
+
+async function loadData() {
+  var count = isGuest ? 20 : document.getElementById('count-select').value;
+  document.getElementById('loading-text').style.display = 'inline';
+
+  var statsRes = await apiFetch('/api/Drone/stats');
+  if (statsRes && statsRes.ok) {
+    var s = await statsRes.json();
+    document.getElementById('st-total').textContent    = s.total || 0;
+    document.getElementById('st-bat').textContent      = (s.avgBattery || 0) + '%';
+    document.getElementById('st-speed').textContent    = (s.avgSpeed || 0) + ' m/s';
+    document.getElementById('st-alt').textContent      = (s.avgAltitude || 0) + ' m';
+    document.getElementById('st-maxspeed').textContent = (s.maxSpeed || 0) + ' m/s';
+    document.getElementById('st-maxalt').textContent   = (s.maxAltitude || 0) + ' m';
+    document.getElementById('st-minbat').textContent   = (s.minBattery || 0) + '%';
+    document.getElementById('st-obstacle').textContent = (s.obstacleCount || 0) + ' kez';
+  }
+
+  var res = await apiFetch('/api/Drone/history?count=' + count);
+  document.getElementById('loading-text').style.display = 'none';
+  if (!res || !res.ok) return;
+  var data = await res.json();
+  if (!data || data.length === 0) {
+    document.getElementById('history-tbody').innerHTML = '<tr><td colspan="13" style="text-align:center;color:#8b949e;padding:30px">Veri bulunamadi.</td></tr>';
+    return;
+  }
+
+  var labels = data.map(function(d) {
+    return new Date(d.recordedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  });
+
+  function updateChart(key, dataArr, datasetIndex) {
+    charts[key].data.labels = labels;
+    charts[key].data.datasets[datasetIndex || 0].data = dataArr;
+    charts[key].update();
+  }
+
+  updateChart('battery',  data.map(function(d){ return d.batteryPercent; }));
+  updateChart('altitude', data.map(function(d){ return d.altitude; }));
+  updateChart('speed',    data.map(function(d){ return d.speed; }));
+  updateChart('signal',   data.map(function(d){ return d.signalStrength; }));
+  updateChart('yaw',      data.map(function(d){ return d.yaw; }));
+  charts.orientation.data.labels = labels;
+  charts.orientation.data.datasets[0].data = data.map(function(d){ return d.roll; });
+  charts.orientation.data.datasets[1].data = data.map(function(d){ return d.pitch; });
+  charts.orientation.update();
+
+  var tbody = '';
+  data.slice().reverse().forEach(function(d) {
+    var t = new Date(d.recordedAt).toLocaleTimeString('tr-TR');
+    var fm = d.flightMode === 'Normal' ? '<span class="badge badge-green">Normal</span>'
+           : d.flightMode === 'ReturnToHome' ? '<span class="badge badge-yellow">RTH</span>'
+           : '<span class="badge badge-red">Failsafe</span>';
+    var rtk = d.rtkStatus === 'Fix' ? '<span class="badge badge-green">Fix</span>' : '<span class="badge badge-yellow">Float</span>';
+    var obs = d.obstacleDetected ? '<span class="badge badge-red">Var</span>' : '<span style="color:#8b949e">Yok</span>';
+    tbody += '<tr>';
+    tbody += '<td style="color:#8b949e">' + t + '</td>';
+    tbody += '<td>' + d.latitude + '</td>';
+    tbody += '<td>' + d.longitude + '</td>';
+    tbody += '<td style="color:#a371f7">' + d.altitude + ' m</td>';
+    tbody += '<td style="color:#d29922">' + d.speed + ' m/s</td>';
+    tbody += '<td style="color:' + (d.batteryPercent < 20 ? '#f85149' : d.batteryPercent < 40 ? '#d29922' : '#3fb950') + '">' + d.batteryPercent + '%</td>';
+    tbody += '<td>' + d.signalStrength + '%</td>';
+    tbody += '<td style="color:#58a6ff">' + d.roll + '°</td>';
+    tbody += '<td style="color:#3fb950">' + d.pitch + '°</td>';
+    tbody += '<td style="color:#d29922">' + d.yaw + '°</td>';
+    tbody += '<td>' + fm + '</td>';
+    tbody += '<td>' + rtk + '</td>';
+    tbody += '<td>' + obs + '</td>';
+    tbody += '</tr>';
+  });
+  document.getElementById('history-tbody').innerHTML = tbody;
+}
+
+loadData();
+</script>
+</body>
+</html>

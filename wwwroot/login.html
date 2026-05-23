@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drone Kurye — Giriş</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .container { width: 100%; max-width: 420px; padding: 20px; }
+  .logo { text-align: center; margin-bottom: 32px; }
+  .logo h1 { font-size: 28px; color: #58a6ff; font-weight: 700; }
+  .logo p { font-size: 13px; color: #8b949e; margin-top: 6px; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 28px; }
+  .tab-row { display: flex; margin-bottom: 24px; border-bottom: 1px solid #30363d; }
+  .tab { flex: 1; text-align: center; padding: 10px; font-size: 14px; cursor: pointer; color: #8b949e; border-bottom: 2px solid transparent; transition: all .2s; }
+  .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+  .form-group { margin-bottom: 16px; }
+  label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 6px; }
+  input { width: 100%; padding: 10px 14px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; font-size: 14px; outline: none; transition: border-color .2s; }
+  input:focus { border-color: #58a6ff; }
+  .btn { width: 100%; padding: 11px; background: #238636; border: none; border-radius: 8px; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; transition: background .2s; margin-top: 4px; }
+  .btn:hover { background: #2ea043; }
+  .btn:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
+  .error { background: #2d1a1a; border: 1px solid #f85149; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #f85149; margin-bottom: 14px; display: none; }
+  .error.show { display: block; }
+  .success { background: #1a3a2a; border: 1px solid #3fb950; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #3fb950; margin-bottom: 14px; display: none; }
+  .success.show { display: block; }
+  .hint { font-size: 12px; color: #8b949e; margin-top: 16px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">
+    <h1>Drone Kurye</h1>
+    <p>Hibrit Kurye Sistemi — Kontrol Paneli</p>
+  </div>
+  <div class="card">
+    <div class="tab-row">
+      <div class="tab active" onclick="showTab('login')">Giris Yap</div>
+      <div class="tab" onclick="showTab('register')">Kayit Ol</div>
+    </div>
+    <div id="error-box" class="error"></div>
+    <div id="success-box" class="success"></div>
+
+    <div id="login-form">
+      <div class="form-group"><label>E-posta</label><input type="email" id="login-email" placeholder="ornek@gmail.com"></div>
+      <div class="form-group"><label>Sifre</label><input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <button class="btn" onclick="doLogin()" id="login-btn">Giris Yap</button>
+      <p class="hint">Test: admin@dronekurye.com / Admin123!</p>
+    </div>
+
+    <div id="register-form" style="display:none">
+      <div class="form-group"><label>Ad Soyad</label><input type="text" id="reg-name" placeholder="Ad Soyad"></div>
+      <div class="form-group"><label>E-posta</label><input type="email" id="reg-email" placeholder="ornek@gmail.com"></div>
+      <div class="form-group"><label>Sifre <span style="font-size:11px">(min 8 karakter, buyuk harf, ozel karakter)</span></label><input type="password" id="reg-password" placeholder="••••••••"></div>
+      <div class="form-group"><label>Sifre Tekrar</label><input type="password" id="reg-confirm" placeholder="••••••••" onkeydown="if(event.key==='Enter')doRegister()"></div>
+      <button class="btn" onclick="doRegister()" id="reg-btn">Kayit Ol</button>
+    </div>
+  </div>
+</div>
+<script>
+const BASE = "https://localhost:53374";
+if (localStorage.getItem("accessToken")) window.location.href = "/dashboard.html";
+
+function showTab(tab) {
+  document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", (i===0&&tab==="login")||(i===1&&tab==="register")));
+  document.getElementById("login-form").style.display = tab==="login"?"block":"none";
+  document.getElementById("register-form").style.display = tab==="register"?"block":"none";
+  clearMsg();
+}
+function showError(m) { var e=document.getElementById("error-box"); e.textContent=m; e.className="error show"; document.getElementById("success-box").className="success"; }
+function showSuccess(m) { var e=document.getElementById("success-box"); e.textContent=m; e.className="success show"; document.getElementById("error-box").className="error"; }
+function clearMsg() { document.getElementById("error-box").className="error"; document.getElementById("success-box").className="success"; }
+
+async function doLogin() {
+  var email=document.getElementById("login-email").value.trim();
+  var password=document.getElementById("login-password").value;
+  if(!email||!password) return showError("E-posta ve sifre zorunludur.");
+  var btn=document.getElementById("login-btn"); btn.disabled=true; btn.textContent="Giris yapiliyor...";
+  try {
+    var res=await fetch(BASE+"/api/Auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});
+    var data=await res.json();
+    if(!res.ok){showError(data.message||"Giris basarisiz.");return;}
+    localStorage.setItem("accessToken",data.accessToken);
+    localStorage.setItem("refreshToken",data.refreshToken);
+    localStorage.setItem("user",JSON.stringify(data.user));
+    showSuccess("Giris basarili, yonlendiriliyorsunuz...");
+    setTimeout(()=>window.location.href="/dashboard.html",800);
+  } catch(e){showError("Sunucuya ulasilamiyor.");}
+  finally{btn.disabled=false;btn.textContent="Giris Yap";}
+}
+
+async function doRegister() {
+  var fullName=document.getElementById("reg-name").value.trim();
+  var email=document.getElementById("reg-email").value.trim();
+  var password=document.getElementById("reg-password").value;
+  var passwordConfirm=document.getElementById("reg-confirm").value;
+  if(!fullName||!email||!password) return showError("Tum alanlar zorunludur.");
+  if(password!==passwordConfirm) return showError("Sifreler eslesmiyor.");
+  var btn=document.getElementById("reg-btn"); btn.disabled=true; btn.textContent="Kayit olunuyor...";
+  try {
+    var res=await fetch(BASE+"/api/Auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,email,password,passwordConfirm})});
+    var data=await res.json();
+    if(!res.ok){showError(data.message||"Kayit basarisiz.");return;}
+    localStorage.setItem("accessToken",data.accessToken);
+    localStorage.setItem("refreshToken",data.refreshToken);
+    localStorage.setItem("user",JSON.stringify(data.user));
+    showSuccess("Kayit basarili, yonlendiriliyorsunuz...");
+    setTimeout(()=>window.location.href="/dashboard.html",800);
+  } catch(e){showError("Sunucuya ulasilamiyor.");}
+  finally{btn.disabled=false;btn.textContent="Kayit Ol";}
+}
+</script>
+</body>
+</html>

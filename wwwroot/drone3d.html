@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drone Kurye — 3D Yonelim</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+<script src="/auth.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; }
+  .page { padding: 24px 20px; }
+  .section-title { font-size: 13px; font-weight: 600; color: #8b949e; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #21262d; padding-bottom: 6px; }
+  .layout { display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start; }
+  @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
+  #three-container {
+    background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+    overflow: hidden; height: 480px; position: relative;
+  }
+  #three-container canvas { width: 100% !important; height: 100% !important; }
+  .loading-overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; background: #161b22; z-index: 10;
+  }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid #30363d;
+    border-top-color: #58a6ff; border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin-bottom: 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 13px; color: #8b949e; }
+  .controls-hint {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; color: #8b949e; background: #0d111788; padding: 4px 10px;
+    border-radius: 20px; white-space: nowrap;
+  }
+  .info-panel { display: flex; flex-direction: column; gap: 10px; }
+  .info-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px; }
+  .info-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+  .angle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .angle-name { font-size: 13px; color: #8b949e; }
+  .angle-val { font-size: 18px; font-weight: 700; }
+  .angle-bar { height: 4px; background: #21262d; border-radius: 2px; margin-top: 4px; }
+  .angle-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .status-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #3fb950; animation: pulse 1.5s infinite; }
+  .dot.off { background: #f85149; animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+  .badge-green { background: #1a3a2a; color: #3fb950; }
+  .badge-yellow { background: #2d2a1a; color: #d29922; }
+  .badge-red { background: #3a1a1a; color: #f85149; }
+  .flight-mode { font-size: 13px; color: #8b949e; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div id="navbar-container"></div>
+<div class="page">
+  <div class="status-bar">
+    <div class="dot off" id="conn-dot"></div>
+    <span id="conn-text" style="font-size:13px;color:#8b949e">Baglanıyor...</span>
+  </div>
+
+  <div class="section-title">DJI M300 RTK — Gercek Zamanli 3D Yonelim</div>
+
+  <div class="layout">
+    <!-- Three.js canvas -->
+    <div id="three-container">
+      <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text">3D model yukleniyor...</div>
+      </div>
+      <div class="controls-hint">Sol tık: döndür &nbsp;|&nbsp; Sag tık: kaydır &nbsp;|&nbsp; Scroll: yakınlaştır</div>
+    </div>
+
+    <!-- Bilgi paneli -->
+    <div class="info-panel">
+      <div class="info-card">
+        <div class="info-label">Ucus Bilgileri</div>
+        <div class="flight-mode">Ucus Modu: <span id="flight-mode-badge"><span class="badge badge-green">Normal</span></span></div>
+        <div class="angle-row">
+          <span class="angle-name">Batarya</span>
+          <span class="angle-val" id="info-battery" style="color:#3fb950">-</span>
+        </div>
+        <div class="angle-row">
+          <span class="angle-name">Yukseklik</span>
+          <span class="angle-val" id="info-alt" style="color:#58a6ff">-</span>
+        </div>
+        <div class="angle-row">
+          <span class="angle-name">Hiz</span>
+          <span class="angle-val" id="info-speed" style="color:#d29922">-</span>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <div class="info-label">Roll (Saga-Sola Egim)</div>
+        <div class="angle-row">
+          <span class="angle-name">Aci</span>
+          <span class="angle-val" id="val-roll" style="color:#58a6ff">0°</span>
+        </div>
+        <div class="angle-bar"><div class="angle-fill" id="bar-roll" style="background:#58a6ff;width:50%"></div></div>
+      </div>
+
+      <div class="info-card">
+        <div class="info-label">Pitch (Ileri-Geri Egim)</div>
+        <div class="angle-row">
+          <span class="angle-name">Aci</span>
+          <span class="angle-val" id="val-pitch" style="color:#3fb950">0°</span>
+        </div>
+        <div class="angle-bar"><div class="angle-fill" id="bar-pitch" style="background:#3fb950;width:50%"></div></div>
+      </div>
+
+      <div class="info-card">
+        <div class="info-label">Yaw (Sol-Sag Donus)</div>
+        <div class="angle-row">
+          <span class="angle-name">Aci</span>
+          <span class="angle-val" id="val-yaw" style="color:#d29922">0°</span>
+        </div>
+        <div class="angle-bar"><div class="angle-fill" id="bar-yaw" style="background:#d29922;width:50%"></div></div>
+      </div>
+
+      <div class="info-card">
+        <div class="info-label">Son Guncelleme</div>
+        <div style="font-size:13px;color:#8b949e" id="ts">-</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Three.js import map -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+if (!requireAuth()) throw new Error("auth");
+renderNavbar("drone3d");
+
+// ── Three.js sahne kurulumu ────────────────────────────────────────────────
+const container = document.getElementById('three-container');
+const W = container.clientWidth;
+const H = container.clientHeight;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.shadowMap.enabled = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x161b22);
+
+const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 1000);
+camera.position.set(0, 1.5, 4);
+
+// Orbit controls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 1.5;
+controls.maxDistance = 10;
+
+// Işıklandırma
+const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambient);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(5, 10, 5);
+dirLight.castShadow = true;
+scene.add(dirLight);
+
+const fillLight = new THREE.DirectionalLight(0x6699ff, 0.4);
+fillLight.position.set(-5, 2, -5);
+scene.add(fillLight);
+
+// Grid
+const grid = new THREE.GridHelper(10, 20, 0x30363d, 0x21262d);
+scene.add(grid);
+
+// Drone için pivot grup
+const droneGroup = new THREE.Group();
+scene.add(droneGroup);
+
+// GLB model yükle
+let droneModel = null;
+const loader = new GLTFLoader();
+loader.load(
+  '/models/dji_m300_rtk.glb',
+  function(gltf) {
+    droneModel = gltf.scene;
+
+    // Zemin/platform mesh'lerini gizle
+      // Zemin bulmak için: index 0 olan mesh'i gizle ve dene
+var meshIndex = 0;
+droneModel.traverse(function(child) {
+  if (child.isMesh) {
+    if (meshIndex === 0 || meshIndex === 1 || meshIndex === 2 || meshIndex === 3 || meshIndex === 4 ) {
+      child.visible = false;
+    }
+    meshIndex++;
+  }
+});
+    // Modeli ortala ve boyutlandır
+    const box = new THREE.Box3().setFromObject(droneModel);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 2.0 / maxDim;
+
+    droneModel.scale.setScalar(scale);
+    droneModel.position.sub(center.multiplyScalar(scale));
+    droneModel.position.y += 0.5;
+
+    droneGroup.add(droneModel);
+    document.getElementById('loading-overlay').style.display = 'none';
+  },
+  function(xhr) {
+    const pct = Math.round(xhr.loaded / xhr.total * 100);
+    document.querySelector('.loading-text').textContent = 'Yukleniyor... ' + pct + '%';
+  },
+  function(err) {
+    console.error('Model yuklenemedi:', err);
+    document.querySelector('.loading-text').textContent = 'Model yuklenemedi, geometrik model kullaniliyor.';
+    // Fallback: geometrik drone
+    loadFallbackDrone();
+    document.getElementById('loading-overlay').style.display = 'none';
+  }
+);
+
+function loadFallbackDrone() {
+  const bodyGeo = new THREE.BoxGeometry(0.8, 0.15, 0.5);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  droneGroup.add(body);
+
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+  [[-0.6,-0.6],[0.6,-0.6],[-0.6,0.6],[0.6,0.6]].forEach(function([x,z]) {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.8,8), armMat);
+    arm.rotation.z = Math.PI/2;
+    arm.position.set(x*0.7, 0, z*0.7);
+    arm.rotation.y = Math.atan2(x,z);
+    droneGroup.add(arm);
+
+    const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,0.08,16), new THREE.MeshStandardMaterial({color:0x58a6ff}));
+    motor.position.set(x, 0.08, z);
+    droneGroup.add(motor);
+  });
+}
+
+// Hedef açılar (smooth geçiş için)
+let targetRoll = 0, targetPitch = 0, targetYaw = 0;
+let currentRoll = 0, currentPitch = 0, currentYaw = 0;
+
+// ── Animasyon döngüsü ──────────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Smooth interpolation
+  currentRoll  += (targetRoll  - currentRoll)  * 0.08;
+  currentPitch += (targetPitch - currentPitch) * 0.08;
+  currentYaw   += (targetYaw   - currentYaw)   * 0.08;
+
+  const toRad = Math.PI / 180;
+  droneGroup.rotation.set(
+    currentPitch * toRad,
+    currentYaw   * toRad,
+    currentRoll  * toRad
+  );
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// Pencere boyutu değişince
+window.addEventListener('resize', function() {
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+});
+
+// ── SignalR ────────────────────────────────────────────────────────────────
+const conn = new signalR.HubConnectionBuilder()
+  .withUrl('/hubs/drone', { accessTokenFactory: () => getToken() })
+  .withAutomaticReconnect()
+  .build();
+
+conn.on('TelemetryUpdate', function(d) {
+  document.getElementById('conn-dot').classList.remove('off');
+  document.getElementById('conn-text').textContent = 'Canli baglanti aktif';
+
+  // 3D rotasyon hedeflerini güncelle
+  targetRoll  = d.roll;
+  targetPitch = d.pitch;
+  targetYaw   = d.yaw;
+
+  // Değer göstergeleri
+  document.getElementById('val-roll').textContent  = d.roll  + '°';
+  document.getElementById('val-pitch').textContent = d.pitch + '°';
+  document.getElementById('val-yaw').textContent   = d.yaw   + '°';
+
+  // Bar göstergeleri (0° = %50, -45° = %0, +45° = %100)
+  function toBar(angle) { return Math.min(100, Math.max(0, 50 + angle * (50/45))); }
+  document.getElementById('bar-roll').style.width  = toBar(d.roll)  + '%';
+  document.getElementById('bar-pitch').style.width = toBar(d.pitch) + '%';
+  document.getElementById('bar-yaw').style.width   = ((d.yaw % 360 + 360) % 360) / 360 * 100 + '%';
+
+  // Uçuş bilgileri
+  var bat = d.batteryPercent;
+  var batEl = document.getElementById('info-battery');
+  batEl.textContent = bat + ' %';
+  batEl.style.color = bat < 20 ? '#f85149' : bat < 40 ? '#d29922' : '#3fb950';
+
+  document.getElementById('info-alt').textContent   = d.altitude + ' m';
+  document.getElementById('info-speed').textContent = d.speed + ' m/s';
+
+  var fm = document.getElementById('flight-mode-badge');
+  if (d.flightMode === 'Normal') fm.innerHTML = '<span class="badge badge-green">Normal</span>';
+  else if (d.flightMode === 'ReturnToHome') fm.innerHTML = '<span class="badge badge-yellow">RTH</span>';
+  else fm.innerHTML = '<span class="badge badge-red">Failsafe</span>';
+
+  document.getElementById('ts').textContent = new Date(d.timestamp).toLocaleTimeString('tr-TR');
+});
+
+conn.onreconnecting(function() {
+  document.getElementById('conn-dot').classList.add('off');
+  document.getElementById('conn-text').textContent = 'Yeniden baglanıyor...';
+});
+
+conn.start().catch(function(e) {
+  document.getElementById('conn-text').textContent = 'Baglanti hatasi.';
+  console.error(e);
+});
+</script>
+</body>
+</html>

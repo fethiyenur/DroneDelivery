@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drone Kurye — Admin Paneli</title>
+<script src="/auth.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; }
+  .page { padding: 24px 20px; }
+  .section-title { font-size: 13px; font-weight: 600; color: #8b949e; margin: 24px 0 12px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #21262d; padding-bottom: 6px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; }
+  .stat-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+  .stat-value { font-size: 28px; font-weight: 700; color: #58a6ff; }
+  .tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid #30363d; flex-wrap: wrap; }
+  .tab { padding: 10px 18px; font-size: 13px; cursor: pointer; color: #8b949e; border-bottom: 2px solid transparent; transition: all .2s; white-space: nowrap; }
+  .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #30363d; }
+  table { width: 100%; border-collapse: collapse; background: #161b22; min-width: 750px; }
+  th { padding: 10px 14px; text-align: left; font-size: 12px; color: #8b949e; background: #1c2128; border-bottom: 1px solid #30363d; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #21262d; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1c2128; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .badge-guest { background: #21262d; color: #8b949e; }
+  .badge-subscriber { background: #1a3a2a; color: #3fb950; }
+  .badge-admin { background: #2d1a3a; color: #a371f7; }
+  .badge-active { background: #1a3a2a; color: #3fb950; }
+  .badge-passive { background: #2d1a1a; color: #f85149; }
+  .badge-free { background: #21262d; color: #8b949e; }
+  .badge-premium { background: #1a2a3a; color: #58a6ff; }
+  .badge-online { background: #1a3a2a; color: #3fb950; }
+  .badge-offline { background: #21262d; color: #8b949e; }
+  .online-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #3fb950; margin-right: 5px; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+  .btn { padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; border: none; font-weight: 500; transition: all .2s; }
+  .btn-off { background: transparent; border: 1px solid #f85149; color: #f85149; }
+  .btn-off:hover { background: #2d1a1a; }
+  .btn-on { background: transparent; border: 1px solid #3fb950; color: #3fb950; }
+  .btn-on:hover { background: #1a3a2a; }
+  .msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; display: none; }
+  .msg.ok { background: #1a3a2a; border: 1px solid #3fb950; color: #3fb950; display: block; }
+  .msg.err { background: #2d1a1a; border: 1px solid #f85149; color: #f85149; display: block; }
+  .empty { color: #8b949e; font-size: 13px; padding: 30px; text-align: center; background: #161b22; }
+  select { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+  .refresh-btn { background: transparent; border: 1px solid #30363d; border-radius: 6px; padding: 5px 12px; color: #8b949e; font-size: 12px; cursor: pointer; float: right; margin-top: -4px; }
+  .refresh-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+</style>
+</head>
+<body>
+<div id="navbar-container"></div>
+<div class="page">
+
+  
+  <div class="section-title">Simulasyon Kontrolu</div>
+  <div class="card" style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px;max-width:400px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <span style="font-size:14px;">Drone Simulasyonu</span>
+      <span id="sim-status" style="font-size:12px;color:#8b949e">Kontrol ediliyor...</span>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="simStart()" id="sim-start-btn" style="flex:1;padding:10px;background:#238636;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Baslat</button>
+      <button onclick="simStop()" id="sim-stop-btn" style="flex:1;padding:10px;background:transparent;border:1px solid #f85149;border-radius:8px;color:#f85149;font-size:13px;font-weight:600;cursor:pointer;">Durdur</button>
+    </div>
+  </div>
+
+<div class="section-title">Genel Istatistikler</div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Toplam Kullanici</div><div class="stat-value" id="s-total">-</div></div>
+    <div class="stat-card"><div class="stat-label">Aktif Hesap</div><div class="stat-value" id="s-active" style="color:#3fb950">-</div></div>
+    <div class="stat-card"><div class="stat-label">Pasif Hesap</div><div class="stat-value" id="s-passive" style="color:#f85149">-</div></div>
+    <div class="stat-card"><div class="stat-label">Cevrimici</div><div class="stat-value" id="s-online" style="color:#3fb950">-</div></div>
+    <div class="stat-card"><div class="stat-label">Premium Uye</div><div class="stat-value" id="s-premium" style="color:#58a6ff">-</div></div>
+    <div class="stat-card"><div class="stat-label">Telemetri Kaydi</div><div class="stat-value" id="s-records" style="color:#a371f7">-</div></div>
+  </div>
+
+  <div class="section-title">
+    Kullanici Yonetimi
+    <button class="refresh-btn" onclick="loadUsers()">Yenile</button>
+  </div>
+  <div id="msg-box" class="msg"></div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('all', this)">Tum Kullanicilar</div>
+    <div class="tab" onclick="showTab('online', this)">Cevrimici</div>
+    <div class="tab" onclick="showTab('active', this)">Aktif Hesaplar</div>
+    <div class="tab" onclick="showTab('passive', this)">Pasif Hesaplar</div>
+    <div class="tab" onclick="showTab('premium', this)">Premium Uyeler</div>
+  </div>
+
+  <div id="tab-all" class="tab-content active"><div class="loading" style="padding:30px;text-align:center;color:#8b949e">Yukleniyor...</div></div>
+  <div id="tab-online" class="tab-content"></div>
+  <div id="tab-active" class="tab-content"></div>
+  <div id="tab-passive" class="tab-content"></div>
+  <div id="tab-premium" class="tab-content"></div>
+
+</div>
+<script>
+if (!requireAdmin()) throw new Error("auth");
+renderNavbar("admin");
+
+var allUsers = [];
+
+loadStats();
+loadUsers();
+
+async function loadSimStatus() {
+  var res = await apiFetch("/api/Simulation/status");
+  if (!res || !res.ok) return;
+  var d = await res.json();
+  updateSimUI(d.isRunning);
+}
+
+function updateSimUI(isRunning) {
+  document.getElementById("sim-status").textContent = isRunning ? "Calisiyor" : "Durdu";
+  document.getElementById("sim-status").style.color = isRunning ? "#3fb950" : "#f85149";
+}
+
+async function simStart() {
+  var res = await apiFetch("/api/Simulation/start", { method: "POST" });
+  if (res && res.ok) { var d = await res.json(); updateSimUI(d.isRunning); showMsg("ok", d.message); }
+}
+
+async function simStop() {
+  var res = await apiFetch("/api/Simulation/stop", { method: "POST" });
+  if (res && res.ok) { var d = await res.json(); updateSimUI(d.isRunning); showMsg("ok", d.message); }
+}
+
+loadSimStatus();
+
+
+// Her 30 saniyede stats yenile (canlı çevrimiçi sayısı için)
+setInterval(function(){ loadStats(); loadUsers(); }, 30000);
+
+function showTab(tab, el) {
+  document.querySelectorAll(".tab").forEach(function(t){ t.classList.remove("active"); });
+  document.querySelectorAll(".tab-content").forEach(function(t){ t.classList.remove("active"); });
+  el.classList.add("active");
+  document.getElementById("tab-"+tab).classList.add("active");
+}
+
+async function loadStats() {
+  var res = await apiFetch("/api/Admin/stats");
+  if (!res || !res.ok) return;
+  var d = await res.json();
+  document.getElementById("s-total").textContent = d.totalUsers;
+  document.getElementById("s-active").textContent = d.activeUsers;
+  document.getElementById("s-passive").textContent = d.totalUsers - d.activeUsers;
+  document.getElementById("s-online").textContent = d.onlineUsers;
+  document.getElementById("s-premium").textContent = d.premiumUsers;
+  document.getElementById("s-records").textContent = d.totalRecords;
+}
+
+async function loadUsers() {
+  var res = await apiFetch("/api/Admin/users");
+  if (!res || !res.ok) return;
+  allUsers = await res.json();
+  renderTable("all",     allUsers);
+  renderTable("online",  allUsers.filter(function(u){ return u.isOnline; }));
+  renderTable("active",  allUsers.filter(function(u){ return u.isActive; }));
+  renderTable("passive", allUsers.filter(function(u){ return !u.isActive; }));
+  renderTable("premium", allUsers.filter(function(u){ return u.subscriptionPlan === "Premium"; }));
+}
+
+function renderTable(tabId, users) {
+  var wrap = document.getElementById("tab-"+tabId);
+  if (users.length === 0) {
+    wrap.innerHTML = '<div class="table-wrap"><div class="empty">Bu kategoride kullanici yok.</div></div>';
+    return;
+  }
+  var roleBadge = { Guest: "badge-guest", Subscriber: "badge-subscriber", Admin: "badge-admin" };
+  var planBadge = { Free: "badge-free", Premium: "badge-premium" };
+
+  var html = '<div class="table-wrap"><table><thead><tr>';
+  html += '<th>ID</th><th>Ad Soyad</th><th>E-posta</th><th>Rol</th><th>Abonelik</th><th>Hesap</th><th>Durum</th><th>Son Giris</th><th>Son Cikis</th><th>Islemler</th>';
+  html += '</tr></thead><tbody>';
+
+  users.forEach(function(u) {
+    var createdAt = new Date(u.createdAt).toLocaleDateString("tr-TR");
+    var lastLogin = u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString("tr-TR") : "-";
+    var lastLogout = u.lastLogoutAt ? new Date(u.lastLogoutAt).toLocaleString("tr-TR") : "-";
+
+    html += '<tr>';
+    html += '<td style="color:#8b949e">#'+u.id+'</td>';
+    html += '<td><strong>'+u.fullName+'</strong></td>';
+    html += '<td style="color:#8b949e;font-size:12px">'+u.email+'</td>';
+    html += '<td><span class="badge '+(roleBadge[u.role]||"badge-guest")+'">'+u.role+'</span></td>';
+    html += '<td><span class="badge '+(planBadge[u.subscriptionPlan]||"badge-free")+'">'+u.subscriptionPlan+'</span></td>';
+    html += '<td><span class="badge '+(u.isActive?"badge-active":"badge-passive")+'">'+(u.isActive?"Aktif":"Pasif")+'</span></td>';
+    html += '<td>';
+    if (u.isOnline) {
+      html += '<span class="online-dot"></span><span style="color:#3fb950;font-size:12px">Cevrimici</span>';
+    } else {
+      html += '<span style="color:#8b949e;font-size:12px">Cevrimdisi</span>';
+    }
+    html += '</td>';
+    html += '<td style="color:#8b949e;font-size:12px">'+lastLogin+'</td>';
+    html += '<td style="color:#8b949e;font-size:12px">'+lastLogout+'</td>';
+    html += '<td style="white-space:nowrap">';
+    if (u.role !== "Admin") {
+      html += '<select onchange="changeRole('+u.id+', this)" style="margin-right:6px">';
+      html += '<option value="">Rol degistir</option>';
+      ["Guest","Subscriber","Admin"].forEach(function(r){
+        html += '<option value="'+r+'"'+(u.role===r?" selected":"")+'>'+r+'</option>';
+      });
+      html += '</select>';
+      if (u.isActive) {
+        html += '<button class="btn btn-off" onclick="toggleActive('+u.id+')">Askiya Al</button>';
+      } else {
+        html += '<button class="btn btn-on" onclick="toggleActive('+u.id+')">Aktif Et</button>';
+      }
+    } else {
+      html += '<span style="color:#8b949e;font-size:12px">Korunan hesap</span>';
+    }
+    html += '</td></tr>';
+  });
+
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
+}
+
+async function changeRole(id, selectEl) {
+  var role = selectEl.value;
+  if (!role) return;
+  var res = await apiFetch("/api/Admin/users/"+id+"/role", { method: "PUT", body: JSON.stringify({ role: role }) });
+  if (!res) return;
+  var data = await res.json();
+  showMsg(res.ok ? "ok" : "err", data.message);
+  if (res.ok) { loadUsers(); loadStats(); }
+  else selectEl.value = "";
+}
+
+async function toggleActive(id) {
+  var res = await apiFetch("/api/Admin/users/"+id+"/toggle-active", { method: "PUT" });
+  if (!res) return;
+  var data = await res.json();
+  showMsg(res.ok ? "ok" : "err", data.message);
+  if (res.ok) { loadUsers(); loadStats(); }
+}
+
+function showMsg(type, text) {
+  var el = document.getElementById("msg-box");
+  el.textContent = text; el.className = "msg " + type;
+  setTimeout(function(){ el.className="msg"; }, 3000);
+}
+</script>
+</body>
+</html>
+<!-- Simülasyon kontrolü admin.html'nin </div> kapanmadan önce eklenir -->

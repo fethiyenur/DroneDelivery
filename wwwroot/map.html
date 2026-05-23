@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drone Kurye — Canli Harita</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+<script src="/auth.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; height: 100vh; }
+  #navbar-container { flex-shrink: 0; }
+  .map-layout { display: flex; flex: 1; overflow: hidden; }
+  #map { flex: 1; }
+  .sidebar { width: 300px; background: #161b22; border-left: 1px solid #30363d; overflow-y: auto; flex-shrink: 0; }
+  @media (max-width: 700px) { .map-layout { flex-direction: column; } .sidebar { width: 100%; height: 320px; border-left: none; border-top: 1px solid #30363d; } }
+  .sidebar-section { padding: 12px 14px; border-bottom: 1px solid #21262d; }
+  .sidebar-title { font-size: 11px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+  .status-bar { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #3fb950; animation: pulse 1.5s infinite; }
+  .dot.off { background: #f85149; animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+  .info-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 12px; border-bottom: 1px solid #0d1117; }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: #8b949e; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .badge-green  { background: #1a3a2a; color: #3fb950; }
+  .badge-yellow { background: #2d2a1a; color: #d29922; }
+  .badge-red    { background: #3a1a1a; color: #f85149; }
+  .badge-blue   { background: #1a2a3a; color: #58a6ff; }
+  .badge-purple { background: #2a1a3a; color: #a371f7; }
+  .delivery-card { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .delivery-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .delivery-desc { font-size: 11px; color: #8b949e; margin-bottom: 8px; }
+  .steps { display: flex; }
+  .step { flex: 1; text-align: center; font-size: 10px; color: #8b949e; position: relative; }
+  .step.active { color: #3fb950; font-weight: 600; }
+  .step.done   { color: #58a6ff; }
+  .step-dot { width: 8px; height: 8px; border-radius: 50%; background: #30363d; margin: 0 auto 3px; position: relative; z-index: 1; }
+  .step.active .step-dot { background: #3fb950; box-shadow: 0 0 5px #3fb950; }
+  .step.done .step-dot   { background: #58a6ff; }
+  .step-line { position: absolute; top: 3px; left: 50%; width: 100%; height: 2px; background: #30363d; z-index: 0; }
+  .step.done .step-line { background: #58a6ff; }
+  .step:last-child .step-line { display: none; }
+  .alert-box { background: #2d1a1a; border: 1px solid #f85149; border-radius: 6px; padding: 8px 12px; margin-top: 8px; font-size: 12px; color: #f85149; display: none; }
+  .alert-box.show { display: block; }
+  .btn-sm { padding: 5px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; border: 1px solid #30363d; background: transparent; color: #8b949e; }
+  .btn-sm.on { border-color: #58a6ff; color: #58a6ff; background: #1a2a3a; }
+  .phase-banner { text-align: center; padding: 6px; border-radius: 6px; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+  .phase-to-base   { background: #1a2a3a; color: #58a6ff; }
+  .phase-to-dest   { background: #2a1a3a; color: #a371f7; }
+  .phase-returning { background: #1a3a2a; color: #3fb950; }
+  .phase-loading   { background: #21262d; color: #8b949e; }
+</style>
+</head>
+<body>
+<div id="navbar-container"></div>
+<div class="map-layout">
+  <div id="map"></div>
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="status-bar">
+        <div class="dot off" id="conn-dot"></div>
+        <span id="conn-text" style="font-size:12px;color:#8b949e">Baglanıyor...</span>
+      </div>
+      <div class="alert-box" id="alert-box"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div id="phase-banner" class="phase-banner phase-loading">Baglanti bekleniyor...</div>
+      <div class="sidebar-title">🚁 Drone</div>
+      <div class="info-row"><span class="info-label">Yukseklik</span><span id="d-alt">-</span></div>
+      <div class="info-row"><span class="info-label">Hiz</span><span id="d-speed">-</span></div>
+      <div class="info-row"><span class="info-label">Batarya</span><span id="d-bat">-</span></div>
+      <div class="info-row"><span class="info-label">Hedefe Uzaklik</span><span id="d-dist">-</span></div>
+      <div class="info-row"><span class="info-label">Mod</span><span id="d-mode">-</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">🚐 Elektrikli Arac</div>
+      <div class="info-row"><span class="info-label">Durum</span><span id="v-status">-</span></div>
+      <div class="info-row"><span class="info-label">Drone Mesafesi</span><span id="v-dist">-</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">📦 Teslimatlar</div>
+      <div id="deliveries-container"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Rota Bilgisi</div>
+      <div class="info-row"><span class="info-label">Drone Rotasi</span><span id="route-len">0 m</span></div>
+      <div class="info-row"><span class="info-label">Arac Rotasi</span><span id="vehicle-route-len">0 m</span></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="btn-sm" onclick="clearRoutes()">Temizle</button>
+        <button class="btn-sm on" onclick="toggleFollow()" id="follow-btn">Takip Acik</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+if (!requireAuth()) throw new Error("auth");
+renderNavbar("map");
+
+// ── Harita ────────────────────────────────────────────────────────────────
+var map = L.map('map').setView([39.820, 30.480], 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap', maxZoom: 19
+}).addTo(map);
+
+function makeIcon(emoji, size) {
+  return L.divIcon({
+    html: '<div style="font-size:'+size+'px;line-height:1;filter:drop-shadow(0 2px 6px #000)">'+emoji+'</div>',
+    iconSize:[size,size], iconAnchor:[size/2,size/2], className:''
+  });
+}
+
+// ── Teslimat noktaları (backend ile aynı) ─────────────────────────────────
+var deliveries = [
+  { id:1, name:'Gokçekaya Koyü',    desc:'Yolsuz dag koyune ilac',    baseLat:39.8380, baseLng:30.4120, destLat:39.8620, destLng:30.3850, status:0 },
+  { id:2, name:'Turkmen Yaylasi',   desc:'Turkmen daginda yayla',      baseLat:39.8100, baseLng:30.3800, destLat:39.8450, destLng:30.3450, status:0 },
+  { id:3, name:'Orman Gozetleme',   desc:'Sundiken orman kulesi',      baseLat:39.7600, baseLng:30.3900, destLat:39.7900, destLng:30.3500, status:0 }
+];
+var statusNames  = ['Hazirlaniyor','Arac Yolda','Drone Ucuyor','Teslim Edildi'];
+var statusBadges = ['badge-yellow','badge-blue','badge-purple','badge-green'];
+
+// ── Marker'lar ────────────────────────────────────────────────────────────
+var droneMarker   = L.marker([39.7767, 30.5206], {icon: makeIcon('🚁', 32)}).addTo(map);
+var vehicleMarker = L.marker([39.7767, 30.5206], {icon: makeIcon('🚐', 28)}).addTo(map);
+droneMarker.bindPopup('<b>DJI M300 RTK</b>');
+vehicleMarker.bindPopup('<b>Elektrikli Arac</b>');
+
+// Hedef ve baz nokta marker'ları
+deliveries.forEach(function(d) {
+  L.marker([d.destLat, d.destLng], {icon: makeIcon('📦', 26)}).addTo(map)
+   .bindPopup('<b>'+d.name+'</b><br>'+d.desc+'<br><span style="color:#f85149">⚠ Araca kapali bolge</span>');
+  L.marker([d.baseLat, d.baseLng], {icon: makeIcon('🅿', 20)}).addTo(map)
+   .bindPopup('<b>Arac Baz Noktasi</b><br>Yolun bittigi yer<br>'+d.name);
+  L.circle([d.destLat, d.destLng], {
+    color:'#f85149', fillColor:'#f8514915', fillOpacity:1, weight:1, radius:400
+  }).addTo(map).bindPopup('Araca kapali dag bolgesi');
+});
+
+// ── Çizgiler ──────────────────────────────────────────────────────────────
+var droneRouteLine   = L.polyline([], {color:'#58a6ff', weight:2, opacity:0.8, dashArray:'6,4'}).addTo(map);
+var vehicleRouteLine = L.polyline([], {color:'#3fb950', weight:3, opacity:0.9}).addTo(map);
+var droneToVehicle   = L.polyline([], {color:'#a371f7', weight:1, opacity:0.5, dashArray:'3,6'}).addTo(map);
+
+var droneRoutePoints   = [];
+var vehicleRoutePoints = [];
+var followDrone = true;
+var lastVehicleLat = 39.7767, lastVehicleLng = 30.5206;
+
+function toggleFollow() {
+  followDrone = !followDrone;
+  var btn = document.getElementById('follow-btn');
+  btn.textContent = 'Takip '+(followDrone?'Acik':'Kapali');
+  btn.className = 'btn-sm'+(followDrone?' on':'');
+}
+function clearRoutes() {
+  droneRoutePoints = []; vehicleRoutePoints = [];
+  droneRouteLine.setLatLngs([]); vehicleRouteLine.setLatLngs([]);
+}
+
+// ── Mesafe ────────────────────────────────────────────────────────────────
+function calcDist(lat1,lng1,lat2,lng2) {
+  var R=6371000, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
+}
+function routeLen(pts) {
+  var t=0; for(var i=1;i<pts.length;i++) t+=calcDist(pts[i-1][0],pts[i-1][1],pts[i][0],pts[i][1]); return t;
+}
+function fmtDist(m) { return m>1000?(m/1000).toFixed(2)+' km':m+' m'; }
+
+// ── Teslimat render ───────────────────────────────────────────────────────
+var activeIdx = 0;
+function renderDeliveries() {
+  var steps = ['Hazir','Arac','Drone','Teslim'];
+  var html = '';
+  deliveries.forEach(function(d) {
+    html += '<div class="delivery-card">';
+    html += '<div class="delivery-name">'+d.name+' <span class="badge '+statusBadges[d.status]+'">'+statusNames[d.status]+'</span></div>';
+    html += '<div class="delivery-desc">'+d.desc+'</div>';
+    html += '<div class="steps">';
+    steps.forEach(function(s,i) {
+      var cls = i<d.status?'done':i===d.status?'active':'';
+      html += '<div class="step '+cls+'"><div class="step-line"></div><div class="step-dot"></div><div>'+s+'</div></div>';
+    });
+    html += '</div></div>';
+  });
+  document.getElementById('deliveries-container').innerHTML = html;
+}
+renderDeliveries();
+
+// ── Faz tespiti (araç ve drone konumuna göre) ─────────────────────────────
+var lastPhase = '';
+function detectAndUpdatePhase(dLat, dLng, vLat, vLng) {
+  if (activeIdx >= deliveries.length) return 'done';
+  var del = deliveries[activeIdx];
+
+  var droneDist  = calcDist(dLat, dLng, vLat, vLng);
+  var vehicleDist = calcDist(vLat, vLng, del.baseLat, del.baseLng);
+  var droneToDest = calcDist(dLat, dLng, del.destLat, del.destLng);
+
+  var phase;
+  if (droneDist < 30 && vehicleDist > 50) phase = 'to_base';
+  else if (droneDist < 30 && vehicleDist <= 50) phase = 'at_base';
+  else if (droneToDest < calcDist(dLat,dLng,vLat,vLng)) phase = 'to_dest';
+  else phase = 'returning';
+
+  // Teslimat durumunu güncelle
+  if ((phase === 'to_base') && del.status < 1) { del.status = 1; renderDeliveries(); }
+  if ((phase === 'at_base' || phase === 'to_dest') && del.status < 2) { del.status = 2; renderDeliveries(); }
+  if (droneToDest <= 2 && del.status < 3) {
+    del.status = 3;
+    renderDeliveries();
+    activeIdx++;
+  }
+
+  return phase;
+}
+
+// ── SignalR ───────────────────────────────────────────────────────────────
+var conn = new signalR.HubConnectionBuilder()
+  .withUrl('/hubs/drone', {accessTokenFactory: ()=>getToken()})
+  .withAutomaticReconnect().build();
+
+conn.on('TelemetryUpdate', function(d) {
+  document.getElementById('conn-dot').classList.remove('off');
+  document.getElementById('conn-text').textContent = 'Canli baglanti aktif';
+
+  // Drone marker
+  droneMarker.setLatLng([d.latitude, d.longitude]);
+  if (followDrone) map.panTo([d.latitude, d.longitude], {animate:true, duration:0.3});
+
+  // Araç marker — backend'den gerçek yol koordinatları geliyor
+  var vLat = d.vehicleLat || lastVehicleLat;
+  var vLng = d.vehicleLng || lastVehicleLng;
+  vehicleMarker.setLatLng([vLat, vLng]);
+
+  // Araç hareket ettiyse rota çiz
+  if (Math.abs(vLat-lastVehicleLat)>0.00001 || Math.abs(vLng-lastVehicleLng)>0.00001) {
+    vehicleRoutePoints.push([vLat, vLng]);
+    if (vehicleRoutePoints.length > 1000) vehicleRoutePoints.shift();
+    vehicleRouteLine.setLatLngs(vehicleRoutePoints);
+  }
+  lastVehicleLat = vLat; lastVehicleLng = vLng;
+
+  // Drone rotası
+  droneRoutePoints.push([d.latitude, d.longitude]);
+  if (droneRoutePoints.length > 1000) droneRoutePoints.shift();
+  droneRouteLine.setLatLngs(droneRoutePoints);
+
+  // Drone–araç bağlantı çizgisi
+  var droneDist = calcDist(d.latitude, d.longitude, vLat, vLng);
+  if (droneDist > 30) {
+    droneToVehicle.setLatLngs([[d.latitude, d.longitude],[vLat, vLng]]);
+  } else {
+    droneToVehicle.setLatLngs([]);
+  }
+
+  // Faz tespit ve güncelle
+  var phase = detectAndUpdatePhase(d.latitude, d.longitude, vLat, vLng);
+  if (phase !== lastPhase) {
+    lastPhase = phase;
+    var banner = document.getElementById('phase-banner');
+    if (phase==='to_base')   { banner.textContent='🚐 Arac Gercek Yoldan Gidiyor...'; banner.className='phase-banner phase-to-base'; }
+    else if (phase==='at_base' || phase==='to_dest') { banner.textContent='🚁 Drone Yolsuz Arazide Ucuyor!'; banner.className='phase-banner phase-to-dest'; }
+    else if (phase==='returning') { banner.textContent='🚁 Drone Araca Donuyor'; banner.className='phase-banner phase-returning'; }
+    else if (phase==='done') { banner.textContent='✅ Tum Teslimatlar Tamamlandi'; banner.className='phase-banner phase-returning'; }
+  }
+
+  // Sidebar güncelle
+  document.getElementById('d-alt').textContent = d.altitude + ' m';
+  document.getElementById('d-speed').textContent = d.speed + ' m/s';
+  var bat = d.batteryPercent;
+  document.getElementById('d-bat').innerHTML = '<span style="color:'+(bat<20?'#f85149':bat<40?'#d29922':'#3fb950')+'">'+bat+'%</span>';
+
+  if (activeIdx < deliveries.length) {
+    var del = deliveries[activeIdx];
+    document.getElementById('d-dist').textContent = calcDist(d.latitude,d.longitude,del.destLat,del.destLng)+' m';
+  } else { document.getElementById('d-dist').textContent = '-'; }
+
+  document.getElementById('d-mode').innerHTML = d.flightMode==='Normal'
+    ? '<span class="badge badge-green">Normal</span>'
+    : d.flightMode==='ReturnToHome'
+    ? '<span class="badge badge-yellow">RTH</span>'
+    : '<span class="badge badge-red">Failsafe</span>';
+
+  document.getElementById('v-dist').textContent = droneDist + ' m';
+  document.getElementById('v-status').innerHTML = droneDist < 30
+    ? '<span class="badge badge-green">Baz Noktada (Gercek Yol)</span>'
+    : '<span class="badge badge-blue">Yolda (Gercek Rota)</span>';
+
+  document.getElementById('route-len').textContent = fmtDist(routeLen(droneRoutePoints));
+  document.getElementById('vehicle-route-len').textContent = fmtDist(routeLen(vehicleRoutePoints));
+
+  var ab = document.getElementById('alert-box');
+  if (d.obstacleDetected) { ab.textContent='Engel Algilandi!'; ab.className='alert-box show'; }
+  else if (d.hmsMessage)  { ab.textContent=d.hmsMessage;       ab.className='alert-box show'; }
+  else { ab.className='alert-box'; }
+});
+
+conn.onreconnecting(function(){ document.getElementById('conn-dot').classList.add('off'); document.getElementById('conn-text').textContent='Yeniden baglanıyor...'; });
+conn.onclose(function(){ document.getElementById('conn-dot').classList.add('off'); document.getElementById('conn-text').textContent='Baglanti kesildi.'; });
+conn.start().catch(function(){ document.getElementById('conn-text').textContent='Baglanti hatasi.'; });
+</script>
+</body>
+</html>

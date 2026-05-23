@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drone Kurye — Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/auth.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; }
+  .page { padding: 20px; }
+  .top-row { display: grid; grid-template-columns: 1fr 380px; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 900px) { .top-row { grid-template-columns: 1fr; } }
+  .section-title { font-size: 12px; font-weight: 600; color: #8b949e; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #21262d; padding-bottom: 5px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 12px; }
+  .card-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+  .card-value { font-size: 20px; font-weight: 600; color: #e6edf3; }
+  .card.ok .card-value { color: #3fb950; }
+  .card.warn .card-value { color: #d29922; }
+  .card.danger .card-value { color: #f85149; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .badge-green { background: #1a3a2a; color: #3fb950; }
+  .badge-yellow { background: #2d2a1a; color: #d29922; }
+  .badge-red { background: #3a1a1a; color: #f85149; }
+  .rpms { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .rpm-box { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 5px 10px; font-size: 12px; }
+  .alert-box { background: #2d1a1a; border: 1px solid #f85149; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; color: #f85149; display: none; }
+  .alert-box.show { display: block; }
+  .status-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #3fb950; animation: pulse 1.5s infinite; }
+  .dot.off { background: #f85149; animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+  .notice { background: #1c2128; border: 1px solid #d29922; border-radius: 8px; padding: 8px 14px; margin-bottom: 12px; font-size: 12px; color: #d29922; }
+  .ts { font-size: 11px; color: #8b949e; margin-top: 6px; margin-bottom: 14px; }
+  .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .chart-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px; }
+  .chart-title { font-size: 11px; color: #8b949e; margin-bottom: 10px; text-transform: uppercase; letter-spacing: .05em; }
+
+  /* 3D Panel */
+  .model-panel { background: #161b22; border: 1px solid #30363d; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+  .model-header { padding: 10px 14px; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; }
+  .model-title { font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .05em; }
+  #three-container { height: 300px; position: relative; background: #0d1117; }
+  #three-container canvas { width: 100% !important; height: 100% !important; }
+  .loading-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0d1117; z-index: 10; }
+  .spinner { width: 28px; height: 28px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .controls-hint { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #8b949e; background: #0d111799; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
+  .angle-row { display: flex; justify-content: space-between; padding: 6px 14px; border-bottom: 1px solid #21262d; }
+  .angle-row:last-child { border-bottom: none; }
+  .angle-name { font-size: 12px; color: #8b949e; }
+  .angle-val { font-size: 13px; font-weight: 600; }
+  .angle-bar-wrap { padding: 0 14px 10px; }
+  .angle-bar { height: 3px; background: #21262d; border-radius: 2px; margin-top: 3px; }
+  .angle-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+</style>
+</head>
+<body>
+<div id="navbar-container"></div>
+<div class="page">
+  <div class="status-bar">
+    <div class="dot off" id="conn-dot"></div>
+    <span id="conn-text" style="font-size:12px;color:#8b949e">Baglanıyor...</span>
+  </div>
+  <div id="guest-notice" class="notice" style="display:none">Ucretsiz plandadasiniz. Premium'a gecerek tum verilere erisin.</div>
+  <div class="alert-box" id="alert-box"></div>
+
+  <div class="top-row">
+    <!-- Sol: Telemetri -->
+    <div>
+      <div class="section-title">Konum ve Ucus</div>
+      <div class="grid">
+        <div class="card"><div class="card-label">Enlem</div><div class="card-value" id="lat" style="font-size:15px">-</div></div>
+        <div class="card"><div class="card-label">Boylam</div><div class="card-value" id="lng" style="font-size:15px">-</div></div>
+        <div class="card"><div class="card-label">Yukseklik</div><div class="card-value" id="alt">-</div></div>
+        <div class="card"><div class="card-label">Hiz</div><div class="card-value" id="speed">-</div></div>
+        <div class="card"><div class="card-label">Ucus Modu</div><div class="card-value" id="flightMode" style="font-size:14px">-</div></div>
+      </div>
+
+      <div class="section-title">Sistem Durumu</div>
+      <div class="grid">
+        <div class="card" id="bat-card"><div class="card-label">Batarya</div><div class="card-value" id="battery">-</div></div>
+        <div class="card"><div class="card-label">Sinyal</div><div class="card-value" id="signal">-</div></div>
+        <div class="card"><div class="card-label">RTK</div><div class="card-value" id="rtk" style="font-size:14px">-</div></div>
+        <div class="card"><div class="card-label">GPS</div><div class="card-value" id="gps" style="font-size:14px">-</div></div>
+        <div class="card"><div class="card-label">Kamera</div><div class="card-value" id="camera" style="font-size:14px">-</div></div>
+        <div class="card"><div class="card-label">Ruzgar</div><div class="card-value" id="wind">-</div></div>
+      </div>
+
+      <div class="section-title">Motor RPM</div>
+      <div class="rpms" id="rpms">-</div>
+      <div class="ts" id="ts">-</div>
+    </div>
+
+    <!-- Sağ: 3D Model -->
+    <div class="model-panel">
+      <div class="model-header">
+        <span class="model-title">DJI M300 RTK — 3D Yonelim</span>
+        <a href="/drone3d.html" style="font-size:11px;color:#58a6ff;text-decoration:none;">Tam ekran →</a>
+      </div>
+      <div id="three-container">
+        <div class="loading-overlay" id="loading-overlay">
+          <div class="spinner"></div>
+          <div style="font-size:11px;color:#8b949e" id="loading-text">Model yukleniyor...</div>
+        </div>
+        <div class="controls-hint">Sol tık: döndür · Scroll: yakınlaştır</div>
+      </div>
+      <div class="angle-row">
+        <span class="angle-name">Roll</span>
+        <span class="angle-val" id="val-roll" style="color:#58a6ff">0°</span>
+      </div>
+      <div class="angle-bar-wrap">
+        <div class="angle-bar"><div class="angle-fill" id="bar-roll" style="background:#58a6ff;width:50%"></div></div>
+      </div>
+      <div class="angle-row">
+        <span class="angle-name">Pitch</span>
+        <span class="angle-val" id="val-pitch" style="color:#3fb950">0°</span>
+      </div>
+      <div class="angle-bar-wrap">
+        <div class="angle-bar"><div class="angle-fill" id="bar-pitch" style="background:#3fb950;width:50%"></div></div>
+      </div>
+      <div class="angle-row">
+        <span class="angle-name">Yaw</span>
+        <span class="angle-val" id="val-yaw" style="color:#d29922">0°</span>
+      </div>
+      <div class="angle-bar-wrap" style="padding-bottom:14px">
+        <div class="angle-bar"><div class="angle-fill" id="bar-yaw" style="background:#d29922;width:50%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grafikler -->
+  <div class="section-title">Gercek Zamanli Grafik (Son 30 Saniye)</div>
+  <div class="chart-grid">
+    <div class="chart-card"><div class="chart-title">Batarya (%)</div><canvas id="chart-battery" height="100"></canvas></div>
+    <div class="chart-card"><div class="chart-title">Yukseklik (m)</div><canvas id="chart-altitude" height="100"></canvas></div>
+    <div class="chart-card"><div class="chart-title">Hiz (m/s)</div><canvas id="chart-speed" height="100"></canvas></div>
+    <div class="chart-card"><div class="chart-title">Sinyal (%)</div><canvas id="chart-signal" height="100"></canvas></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+if (!requireAuth()) throw new Error("auth");
+renderNavbar("dashboard");
+var user = getUser();
+if (user.role === "Guest") document.getElementById("guest-notice").style.display = "block";
+
+// ── Three.js ──────────────────────────────────────────────────────────────
+const container = document.getElementById('three-container');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+container.appendChild(renderer.domElement);
+
+function resize() {
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  camera.aspect = container.clientWidth / container.clientHeight;
+  camera.updateProjectionMatrix();
+}
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+camera.position.set(0, 1.2, 3.5);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 1.5;
+controls.maxDistance = 8;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+dir.position.set(5, 10, 5);
+scene.add(dir);
+scene.add(new THREE.DirectionalLight(0x6699ff, 0.3).position.set(-5, 2, -5));
+
+const grid = new THREE.GridHelper(8, 16, 0x21262d, 0x1a1f26);
+scene.add(grid);
+
+const droneGroup = new THREE.Group();
+scene.add(droneGroup);
+
+let targetRoll = 0, targetPitch = 0, targetYaw = 0;
+let currentRoll = 0, currentPitch = 0, currentYaw = 0;
+
+const loader = new GLTFLoader();
+loader.load('/models/dji_m300_rtk.glb',
+  function(gltf) {
+    const model = gltf.scene;
+    // Zemin mesh'ini gizle (index 0 ve 1)
+    var idx = 0;
+    model.traverse(function(child) {
+      if (child.isMesh) {
+        if (idx === 0 || idx === 1 || idx === 2 || idx === 3 || idx === 4) child.visible = false;
+        idx++;
+      }
+    });
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const scale = 1.8 / Math.max(size.x, size.y, size.z);
+    model.scale.setScalar(scale);
+    model.position.sub(center.multiplyScalar(scale));
+    model.position.y += 0.3;
+    droneGroup.add(model);
+    document.getElementById('loading-overlay').style.display = 'none';
+  },
+  function(xhr) {
+    const pct = Math.round(xhr.loaded / xhr.total * 100);
+    document.getElementById('loading-text').textContent = 'Yukleniyor... ' + pct + '%';
+  },
+  function() {
+    document.getElementById('loading-overlay').style.display = 'none';
+  }
+);
+
+function animate() {
+  requestAnimationFrame(animate);
+  currentRoll  += (targetRoll  - currentRoll)  * 0.08;
+  currentPitch += (targetPitch - currentPitch) * 0.08;
+  currentYaw   += (targetYaw   - currentYaw)   * 0.08;
+  const r = Math.PI / 180;
+  droneGroup.rotation.set(currentPitch * r, currentYaw * r, currentRoll * r);
+  controls.update();
+  renderer.render(scene, camera);
+}
+resize();
+animate();
+window.addEventListener('resize', resize);
+
+// ── Chart.js ──────────────────────────────────────────────────────────────
+var maxPts = 30;
+var labels = new Array(maxPts).fill('');
+
+function makeChart(id, color) {
+  return new Chart(document.getElementById(id).getContext('2d'), {
+    type: 'line',
+    data: { labels: labels, datasets: [{ data: [], borderColor: color, backgroundColor: color+'22', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0 }] },
+    options: { animation: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } } } }
+  });
+}
+
+var charts = {
+  battery: makeChart('chart-battery', '#3fb950'),
+  altitude: makeChart('chart-altitude', '#58a6ff'),
+  speed:    makeChart('chart-speed',    '#d29922'),
+  signal:   makeChart('chart-signal',   '#a371f7')
+};
+
+function pushChart(key, val) {
+  var d = charts[key].data.datasets[0].data;
+  d.push(val);
+  if (d.length > maxPts) d.shift();
+  charts[key].update();
+}
+
+// ── SignalR ────────────────────────────────────────────────────────────────
+const conn = new signalR.HubConnectionBuilder()
+  .withUrl('/hubs/drone', { accessTokenFactory: () => getToken() })
+  .withAutomaticReconnect().build();
+
+conn.on('TelemetryUpdate', function(d) {
+  document.getElementById('conn-dot').classList.remove('off');
+  document.getElementById('conn-text').textContent = 'Canli baglanti aktif';
+
+  document.getElementById('lat').textContent = d.latitude;
+  document.getElementById('lng').textContent = d.longitude;
+  document.getElementById('alt').textContent = d.altitude + ' m';
+  document.getElementById('speed').textContent = d.speed + ' m/s';
+
+  var fm = document.getElementById('flightMode');
+  if (d.flightMode==='Normal') fm.innerHTML='<span class="badge badge-green">Normal</span>';
+  else if (d.flightMode==='ReturnToHome') fm.innerHTML='<span class="badge badge-yellow">RTH</span>';
+  else fm.innerHTML='<span class="badge badge-red">Failsafe</span>';
+
+  var bat = d.batteryPercent;
+  document.getElementById('bat-card').className = 'card'+(bat<20?' danger':bat<40?' warn':' ok');
+  document.getElementById('battery').textContent = bat + ' %';
+  document.getElementById('signal').textContent = d.signalStrength + ' %';
+  document.getElementById('rtk').innerHTML = d.rtkStatus==='Fix'?'<span class="badge badge-green">Fix</span>':'<span class="badge badge-yellow">Float</span>';
+  document.getElementById('gps').innerHTML = d.gpsConnected?'<span class="badge badge-green">Bagli</span>':'<span class="badge badge-red">Yok</span>';
+  document.getElementById('camera').innerHTML = d.cameraOk?'<span class="badge badge-green">OK</span>':'<span class="badge badge-red">Hata</span>';
+  document.getElementById('wind').textContent = d.windLevel + '/5';
+
+  // 3D rotasyon
+  targetRoll  = d.roll;
+  targetPitch = d.pitch;
+  targetYaw   = d.yaw;
+
+  // Açı göstergeleri
+  document.getElementById('val-roll').textContent  = d.roll  + '°';
+  document.getElementById('val-pitch').textContent = d.pitch + '°';
+  document.getElementById('val-yaw').textContent   = d.yaw   + '°';
+  function toBar(a) { return Math.min(100, Math.max(0, 50 + a * (50/45))); }
+  document.getElementById('bar-roll').style.width  = toBar(d.roll)  + '%';
+  document.getElementById('bar-pitch').style.width = toBar(d.pitch) + '%';
+  document.getElementById('bar-yaw').style.width   = ((d.yaw%360+360)%360)/360*100 + '%';
+
+  // Motor RPM
+  var rpmsHtml = '';
+  for (var i=0;i<d.motorRpms.length;i++) rpmsHtml+='<div class="rpm-box">M'+(i+1)+': '+d.motorRpms[i]+' RPM</div>';
+  document.getElementById('rpms').innerHTML = rpmsHtml;
+
+  // Grafikler
+  pushChart('battery', d.batteryPercent);
+  pushChart('altitude', d.altitude);
+  pushChart('speed', d.speed);
+  pushChart('signal', d.signalStrength);
+
+  var ab = document.getElementById('alert-box');
+  if (d.obstacleDetected) { ab.textContent='Engel Algilandi!'; ab.className='alert-box show'; }
+  else if (d.hmsMessage) { ab.textContent=d.hmsMessage; ab.className='alert-box show'; }
+  else { ab.className='alert-box'; }
+
+  document.getElementById('ts').textContent = 'Son guncelleme: ' + new Date(d.timestamp).toLocaleTimeString('tr-TR');
+});
+
+conn.onreconnecting(function(){ document.getElementById('conn-dot').classList.add('off'); document.getElementById('conn-text').textContent='Yeniden baglanıyor...'; });
+conn.onclose(function(){ document.getElementById('conn-dot').classList.add('off'); document.getElementById('conn-text').textContent='Baglanti kesildi.'; });
+conn.start().catch(function(e){ document.getElementById('conn-text').textContent='Baglanti hatasi.'; });
+</script>
+</body>
+</html>

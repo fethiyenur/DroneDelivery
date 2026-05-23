@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drone Kurye — Profilim</title>
+<script src="/auth.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; }
+  .page { padding: 24px 20px; max-width: 600px; }
+  .section-title { font-size: 13px; font-weight: 600; color: #8b949e; margin: 24px 0 12px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #21262d; padding-bottom: 6px; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; margin-bottom: 12px; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #21262d; }
+  .row:last-child { border-bottom: none; }
+  .row-label { font-size: 13px; color: #8b949e; }
+  .row-value { font-size: 14px; color: #e6edf3; font-weight: 500; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+  .badge-guest { background: #21262d; color: #8b949e; }
+  .badge-subscriber { background: #1a3a2a; color: #3fb950; }
+  .badge-admin { background: #2d1a3a; color: #a371f7; }
+  .badge-free { background: #21262d; color: #8b949e; }
+  .badge-premium { background: #1a2a3a; color: #58a6ff; }
+  .btn { padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all .2s; }
+  .btn-danger { background: transparent; border: 1px solid #f85149; color: #f85149; }
+  .btn-danger:hover { background: #2d1a1a; }
+  .btn-primary { background: #238636; color: #fff; }
+  .btn-primary:hover { background: #2ea043; }
+  .token-box { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px; font-size: 11px; color: #8b949e; word-break: break-all; margin-top: 8px; font-family: monospace; max-height: 80px; overflow: hidden; }
+  .success { background: #1a3a2a; border: 1px solid #3fb950; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #3fb950; margin-bottom: 12px; display: none; }
+  .success.show { display: block; }
+  .error { background: #2d1a1a; border: 1px solid #f85149; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #f85149; margin-bottom: 12px; display: none; }
+  .error.show { display: block; }
+</style>
+</head>
+<body>
+<div id="navbar-container"></div>
+<div class="page">
+
+  <div class="section-title">Hesap Bilgileri</div>
+  <div id="success-box" class="success"></div>
+  <div id="error-box" class="error"></div>
+
+  <div class="card">
+    <div class="row"><span class="row-label">Ad Soyad</span><span class="row-value" id="p-name">-</span></div>
+    <div class="row"><span class="row-label">E-posta</span><span class="row-value" id="p-email">-</span></div>
+    <div class="row"><span class="row-label">Rol</span><span class="row-value" id="p-role">-</span></div>
+    <div class="row"><span class="row-label">Abonelik</span><span class="row-value" id="p-plan">-</span></div>
+    <div class="row"><span class="row-label">Kullanici ID</span><span class="row-value" id="p-id">-</span></div>
+  </div>
+
+  <div class="section-title">Token Bilgileri</div>
+  <div class="card">
+    <div class="row">
+      <span class="row-label">Access Token</span>
+      <button class="btn btn-primary" onclick="refreshToken()" id="refresh-btn">Yenile</button>
+    </div>
+    <div class="token-box" id="token-display">-</div>
+    <div class="row" style="margin-top:12px">
+      <span class="row-label">Refresh Token</span>
+      <span class="row-value" style="font-size:11px;color:#8b949e">Gizli</span>
+    </div>
+  </div>
+
+  <div class="section-title">Oturum</div>
+  <div class="card">
+    <div class="row">
+      <span class="row-label">Aktif oturumu sonlandir</span>
+      <button class="btn btn-danger" onclick="logout()">Cikis Yap</button>
+    </div>
+    <div class="row">
+      <span class="row-label">Sunucu baglantisi</span>
+      <span class="row-value" id="server-status">Kontrol ediliyor...</span>
+    </div>
+  </div>
+
+</div>
+<script>
+if (!requireAuth()) throw new Error("auth");
+renderNavbar("profile");
+
+var user = getUser();
+document.getElementById("p-name").textContent = user.fullName || "-";
+document.getElementById("p-email").textContent = user.email || "-";
+document.getElementById("p-id").textContent = "#" + (user.id || "-");
+
+var role = user.role || "Guest";
+var roleBadge = { Guest: "badge-guest", Subscriber: "badge-subscriber", Admin: "badge-admin" };
+document.getElementById("p-role").innerHTML = '<span class="badge ' + (roleBadge[role]||"badge-guest") + '">' + role + '</span>';
+
+var plan = user.subscriptionPlan || "Free";
+document.getElementById("p-plan").innerHTML = '<span class="badge badge-' + plan.toLowerCase() + '">' + plan + '</span>';
+
+document.getElementById("token-display").textContent = getToken() || "-";
+
+// Sunucu bağlantısı test
+apiFetch("/api/Auth/me").then(function(res) {
+  document.getElementById("server-status").innerHTML = res && res.ok
+    ? '<span style="color:#3fb950">Bagli</span>'
+    : '<span style="color:#f85149">Hata</span>';
+}).catch(function() {
+  document.getElementById("server-status").innerHTML = '<span style="color:#f85149">Baglanti yok</span>';
+});
+
+async function refreshToken() {
+  var btn = document.getElementById("refresh-btn");
+  btn.disabled = true; btn.textContent = "Yenileniyor...";
+  var ok = await tryRefresh();
+  if (ok) {
+    document.getElementById("token-display").textContent = getToken();
+    var sb = document.getElementById("success-box"); sb.textContent = "Token basariyla yenilendi."; sb.className = "success show";
+    setTimeout(function(){ sb.className="success"; }, 3000);
+    // user bilgisini de guncelle
+    user = getUser();
+  } else {
+    var eb = document.getElementById("error-box"); eb.textContent = "Token yenilenemedi, lutfen tekrar giris yapin."; eb.className = "error show";
+  }
+  btn.disabled = false; btn.textContent = "Yenile";
+}
+</script>
+</body>
+</html>
