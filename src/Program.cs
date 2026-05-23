@@ -20,12 +20,12 @@ if (!string.IsNullOrEmpty(port))
 }
 
 //
-// ── Veritabanı
+// ── Veritabanı Yol Sabitlemesi
 //
-builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlite(builder.Configuration.GetConnectionString("Default")));
+var dbPath = Path.Combine(AppContext.BaseDirectory, "dronekurye.db"); // appsettings'teki db adı neyse onu yazın
 
-//
+builder.Services.AddDbContext<AppDbContext>(opt =>
+    opt.UseSqlite($"Data Source={dbPath}"));
 // ── JWT AUTH
 //
 var jwtSecret = builder.Configuration["Jwt:Secret"]
