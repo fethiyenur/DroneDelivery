@@ -103,6 +103,35 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
 }
+// Migration'ın hemen altına ekle
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+
+    // ── Seed: Admin kullanıcısı yoksa oluştur
+    if (!db.Users.Any(u => u.Email == "admin@dronekurye.com"))
+    {
+        var admin = new DroneKurye.Models.User
+        {
+            FullName = "Admin",
+            Email = "admin@dronekurye.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
+            Role = DroneKurye.Models.Role.Admin,
+            IsActive = true,
+            IsOnline = false,
+            LastLoginAt = DateTime.UtcNow
+        };
+        db.Users.Add(admin);
+        db.Subscriptions.Add(new DroneKurye.Models.Subscription
+        {
+            User = admin,
+            Plan = DroneKurye.Models.SubscriptionPlan.Free,
+            Status = DroneKurye.Models.SubscriptionStatus.Active
+        });
+        await db.SaveChangesAsync();
+    }
+}
 
 app.UseCors("Frontend");
 app.UseStaticFiles();
