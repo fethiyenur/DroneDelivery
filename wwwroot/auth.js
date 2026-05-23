@@ -1,5 +1,5 @@
 // ── Sabitler ────────────────────────────────────────────────────────────────
-const BASE = "https://localhost:53374";
+const BASE = "https://dronedelivery-gc2m.onrender.com";
 
 // ── Token yönetimi ───────────────────────────────────────────────────────────
 function getToken()   { return localStorage.getItem("accessToken"); }
