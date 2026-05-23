@@ -9,6 +9,7 @@ using DroneKurye.Middleware;
 using DroneKurye.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseUrls("http://0.0.0.0:8080");
 
 // ── Veritabanı ─────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(opt =>
@@ -126,5 +127,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<DroneHub>("/hubs/drone");
+
+app.MapGet("/", () => "Drone API is running");
 
 app.Run();
