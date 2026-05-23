@@ -24,12 +24,6 @@ secrets.json
 ## API keys / local configs (opsiyonel)
 *.key
 
-## =========================
-## Databases
-## =========================
-*.db
-*.sqlite
-*.sqlite3
 
 ## =========================
 ## Logs
