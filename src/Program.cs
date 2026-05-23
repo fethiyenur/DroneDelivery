@@ -9,7 +9,7 @@ using DroneKurye.Middleware;
 using DroneKurye.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.WebHost.UseUrls("http://0.0.0.0:8080");
+
 
 // ── Veritabanı ─────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(opt =>
@@ -108,6 +108,12 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+var port = Environment.GetEnvironmentVariable("PORT");
+
+if (!string.IsNullOrEmpty(port))
+{
+    app.Urls.Add($"http://0.0.0.0:{port}");
+}
 
 // ── Middleware Pipeline ────────────────────────────────────────────────────
 if (app.Environment.IsDevelopment())
