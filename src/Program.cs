@@ -10,24 +10,17 @@ using DroneKurye.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-//
-// ── 🔥 RENDER PORT FIX (çok kritik)
-//
+// ── Render PORT fix
 var port = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrEmpty(port))
-{
     builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
-}
 
-//
-// ── Veritabanı Yol Sabitlemesi
-//
-var dbPath = Path.Combine(AppContext.BaseDirectory, "dronekurye.db"); // appsettings'teki db adı neyse onu yazın
-
+// ── SQLite yolu
+var dbPath = Path.Combine(AppContext.BaseDirectory, "dronekurye.db");
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite($"Data Source={dbPath}"));
-// ── JWT AUTH
-//
+
+// ── JWT
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? throw new InvalidOperationException("Jwt:Secret yapılandırılmamış!");
 
@@ -52,126 +45,71 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             {
                 var token = ctx.Request.Query["access_token"];
                 var path = ctx.HttpContext.Request.Path;
-
                 if (!string.IsNullOrEmpty(token) && path.StartsWithSegments("/hubs"))
-                {
                     ctx.Token = token;
-                }
-
                 return Task.CompletedTask;
             }
         };
     });
 
-//
-// ── Authorization
-//
 builder.Services.AddAuthorization(Policies.Register);
 
-//
-// ── Services
-//
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-
 builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton<DroneSimulationService>();
 builder.Services.AddSingleton<IDroneSimulationService>(sp =>
     sp.GetRequiredService<DroneSimulationService>());
-
 builder.Services.AddHostedService(sp =>
     sp.GetRequiredService<DroneSimulationService>());
 
-//
-// ── CORS
-//
 builder.Services.AddCors(opt =>
-{
     opt.AddPolicy("Frontend", policy =>
-        policy
-            .AllowAnyOrigin()
-            .AllowAnyHeader()
-            .AllowAnyMethod());
-});
+        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
-//
-// ── SignalR
-//
 builder.Services.AddSignalR();
-
-//
-// ── Controllers + Swagger
-//
 builder.Services.AddControllers();
-
 builder.Services.AddEndpointsApiExplorer();
-
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "Drone Kurye API",
-        Version = "v1",
-        Description = "Hibrit Drone Kurye Sistemi"
-    });
-
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Drone Kurye API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Name = "Authorization",
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Bearer {token}"
+        Name = "Authorization", Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer", BearerFormat = "JWT",
+        In = ParameterLocation.Header, Description = "Bearer {token}"
     });
-
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
+    {{
+        new OpenApiSecurityScheme { Reference = new OpenApiReference
+            { Type = ReferenceType.SecurityScheme, Id = "Bearer" }},
+        Array.Empty<string>()
+    }});
 });
 
 var app = builder.Build();
 
-//
-// ── Pipeline
-//
+// ── Swagger sadece Dev'de
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+}
 
-    using var scope = app.Services.CreateScope();
+// ── ✅ Migration HER ortamda çalışsın (kritik düzeltme)
+using (var scope = app.Services.CreateScope())
+{
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
 }
 
-// ── ⚠️ Render için HTTPS redirect'i tamamen devredışı bırakıyoruz (Render SSL'i kendisi çözüyor)
-// app.UseHttpsRedirection(); 
-
-// ── CORS ve Statik dosyaların sırasını optimize ettik
 app.UseCors("Frontend");
 app.UseStaticFiles();
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.MapHub<DroneHub>("/hubs/drone");
-
-// Fallback: Eğer tarayıcı direkt ana sayfaya ("/") gelirse statik index.html veya login.html'e yönlenebilsin
-app.MapGet("/ping", () => "Drone API is running"); 
+app.MapGet("/ping", () => "Drone API is running");
 
 app.Run();
