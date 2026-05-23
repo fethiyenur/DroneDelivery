@@ -157,14 +157,12 @@ if (app.Environment.IsDevelopment())
     await db.Database.MigrateAsync();
 }
 
-//
-// ⚠️ Render için HTTPS redirect bazen sorun çıkarabilir
-//
-app.UseHttpsRedirection();
+// ── ⚠️ Render için HTTPS redirect'i tamamen devredışı bırakıyoruz (Render SSL'i kendisi çözüyor)
+// app.UseHttpsRedirection(); 
 
-app.UseStaticFiles();
-
+// ── CORS ve Statik dosyaların sırasını optimize ettik
 app.UseCors("Frontend");
+app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -173,6 +171,7 @@ app.MapControllers();
 
 app.MapHub<DroneHub>("/hubs/drone");
 
-app.MapGet("/", () => "Drone API is running");
+// Fallback: Eğer tarayıcı direkt ana sayfaya ("/") gelirse statik index.html veya login.html'e yönlenebilsin
+app.MapGet("/ping", () => "Drone API is running"); 
 
 app.Run();

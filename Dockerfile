@@ -16,8 +16,7 @@ WORKDIR /app
 
 COPY --from=build /app/publish .
 
-# Render port uyumu (ÇOK ÖNEMLİ)
-ENV ASPNETCORE_URLS=http://+:8080
+# ── ⚠️ Render Port Fix: Sabit portu kaldırıyoruz, Program.cs dinamik yönetecek
 EXPOSE 8080
 
 # DLL adı burada senin proje adına göre olmalı
