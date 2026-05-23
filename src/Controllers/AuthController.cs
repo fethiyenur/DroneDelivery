@@ -25,12 +25,21 @@ public class AuthController : ControllerBase
 
     /// <summary>Kullanıcı girişi</summary>
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequest req)
+public async Task<IActionResult> Login([FromBody] LoginRequest req)
+{
+    try
     {
         var (ok, error, response) = await _auth.LoginAsync(req);
         if (!ok) return Unauthorized(new { message = error });
         return Ok(response);
     }
+    catch (Exception ex)
+    {
+        Console.WriteLine("=== LOGIN HATA ===");
+        Console.WriteLine(ex.ToString());
+        return StatusCode(500, new { message = ex.Message, detail = ex.ToString() });
+    }
+}
 
     /// <summary>Access token yenileme</summary>
     [HttpPost("refresh")]
