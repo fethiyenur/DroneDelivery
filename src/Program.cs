@@ -140,5 +140,14 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<DroneHub>("/hubs/drone");
 app.MapGet("/ping", () => "Drone API is running");
+app.MapGet("/debug-files", () =>
+{
+    var wwwroot = Path.Combine(AppContext.BaseDirectory, "wwwroot", "models");
+    if (!Directory.Exists(wwwroot))
+        return Results.Ok("wwwroot/models klasörü YOK. BaseDir: " + AppContext.BaseDirectory);
+    var files = Directory.GetFiles(wwwroot);
+    return Results.Ok(new { baseDir = AppContext.BaseDirectory, files = files });
+});
+
 
 app.Run();
