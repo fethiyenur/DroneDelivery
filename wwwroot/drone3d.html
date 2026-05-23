@@ -166,19 +166,22 @@ controls.minDistance = 1.5;
 controls.maxDistance = 10;
 
 // ── Işıklar (target'lar sahneye eklendi — THREE Object3D hatası bu yüzden çıkıyordu)
-const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+// YENİ - ÇALIŞAN
+const ambient = new THREE.AmbientLight(0xffffff, 0.8);
 scene.add(ambient);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+const dirLight = new THREE.PointLight(0xffffff, 2, 50);
 dirLight.position.set(5, 10, 5);
 dirLight.castShadow = true;
 scene.add(dirLight);
-scene.add(dirLight.target); // ← DÜZELTME
 
-const fillLight = new THREE.DirectionalLight(0x6699ff, 0.4);
+const fillLight = new THREE.PointLight(0x6699ff, 1, 30);
 fillLight.position.set(-5, 2, -5);
 scene.add(fillLight);
-scene.add(fillLight.target); // ← DÜZELTME
+
+const backLight = new THREE.PointLight(0xffffff, 0.5, 20);
+backLight.position.set(0, -3, -5);
+scene.add(backLight);
 
 const grid = new THREE.GridHelper(10, 20, 0x30363d, 0x21262d);
 scene.add(grid);
