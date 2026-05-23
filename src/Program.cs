@@ -134,7 +134,12 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseCors("Frontend");
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
+        Path.Combine(AppContext.BaseDirectory, "wwwroot")),
+    RequestPath = ""
+});
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
